@@ -65,9 +65,14 @@ if st.button("🔎 Generate Disavow List"):
                 norm = normalize_backlink_df(df)
                 all_dfs.append(norm)
             except:
-                df = pd.read_csv(file, encoding="utf-8", engine="python")
-                norm = normalize_backlink_df(df)
-                all_dfs.append(norm)
+try:
+    df = pd.read_csv(file, encoding="utf-8", engine="python")
+    if df.empty or len(df.columns) == 0:
+        raise ValueError("Empty or malformed CSV.")
+    norm = normalize_backlink_df(df)
+    all_dfs.append(norm)
+except Exception as e:
+    st.warning(f"⚠️ Skipped file '{file.name}': {e}")
 
         df = pd.concat(all_dfs, ignore_index=True)
         df['referring_domain'] = df['referring_page_url'].apply(lambda x: urlparse(str(x)).netloc.lower().replace("www.", ""))
