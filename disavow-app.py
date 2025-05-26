@@ -47,11 +47,15 @@ if st.button("🔎 Generate Disavow List"):
     else:
         suspicious_anchors = set(pd.read_csv(anchor_file)['anchor_text'].dropna().str.strip().str.lower())
 
-        disavow_lines = disavow_file.read().decode("utf-8").splitlines()
-        existing_domains = {
-            line.strip().replace("domain:", "").lower().replace("www.", "")
-            for line in disavow_lines if line.strip().startswith("domain:")
-        }
+ try:
+    disavow_lines = disavow_file.read().decode("utf-8", errors="ignore").splitlines()
+    existing_domains = {
+        str(line).strip().replace("domain:", "").lower().replace("www.", "")
+        for line in disavow_lines if str(line).strip().startswith("domain:")
+    }
+except Exception as e:
+    st.error(f"Failed to read disavow file: {e}")
+    existing_domains = set()
 
         all_dfs = []
         for file in backlink_files:
