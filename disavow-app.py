@@ -47,7 +47,6 @@ if st.button("🔎 Generate Disavow List"):
     else:
         suspicious_anchors = set(pd.read_csv(anchor_file)['anchor_text'].dropna().str.strip().str.lower())
 
- try:
     disavow_lines = disavow_file.read().decode("utf-8", errors="ignore").splitlines()
     existing_domains = {
         str(line).strip().replace("domain:", "").lower().replace("www.", "")
