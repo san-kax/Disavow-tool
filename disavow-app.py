@@ -64,8 +64,7 @@ if st.button("🔎 Generate Disavow List"):
                 df = pd.read_csv(file, encoding="ISO-8859-1", engine="python")
                 norm = normalize_backlink_df(df)
                 all_dfs.append(norm)
-            except:
-    df = pd.read_csv(file, encoding="utf-8", engine="python")
+      df = pd.read_csv(file, encoding="utf-8", engine="python")
     if df.empty or len(df.columns) == 0:
         raise ValueError("Empty or malformed CSV.")
     norm = normalize_backlink_df(df)
