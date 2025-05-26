@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 import io
 
 st.set_page_config(page_title="Disavow Combiner", layout="wide")
-st.title("🔗 Combine & Filter Disavow Domains")
+st.title("🔗 Disavow Tool")
 
 # Upload files
 st.sidebar.header("Upload Required Files")
