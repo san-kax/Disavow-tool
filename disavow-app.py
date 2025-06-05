@@ -106,10 +106,6 @@ if st.button("🚀 Generate Disavow List"):
             excel_output.seek(0)
             st.session_state["disavow_xlsx"] = excel_output.read()
 
-            # Download buttons (won't disappear after one click)
-            st.download_button("⬇️ Download disavow_list.txt", st.session_state["disavow_txt"], file_name="disavow_list.txt")
-            st.download_button("⬇️ Download disavow_export.xlsx", st.session_state["disavow_xlsx"], file_name="disavow_export.xlsx")
-
         except Exception as e:
             st.error(f"❌ Something went wrong: {e}")
 
@@ -118,10 +114,12 @@ if "disavow_txt" in st.session_state and "disavow_xlsx" in st.session_state:
     st.download_button(
         "⬇️ Download disavow_list.txt",
         st.session_state["disavow_txt"],
-        file_name="disavow_list.txt"
+        file_name="disavow_list.txt",
+        key="download_txt_button"
     )
     st.download_button(
         "⬇️ Download disavow_export.xlsx",
         st.session_state["disavow_xlsx"],
-        file_name="disavow_export.xlsx"
+        file_name="disavow_export.xlsx",
+        key="download_xlsx_button"
     )
