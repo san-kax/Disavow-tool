@@ -11,19 +11,18 @@ st.title("🔗 Disavow Tool")
 # === SIDEBAR ===
 st.sidebar.header("Upload Required Files")
 backlink_files = st.sidebar.file_uploader("Upload backlink CSV files", type="csv", accept_multiple_files=True)
-disavow_file = st.sidebar.file_uploader("Upload existing disavow.txt", type="txt")
+disavow_file = st.sidebar.file_uploader("Upload existing disavow.txt (optional)", type="txt")
 
-# Link to editable Google Sheet
+# Google Sheet for suspicious anchor list
 SHEET_LINK = "https://docs.google.com/spreadsheets/d/1S_fkjSaCQLv5xLMcdqC-Xh2gKn1WazeNs1J14aukx84/edit#gid=147585760"
 CSV_EXPORT_URL = "https://docs.google.com/spreadsheets/d/1S_fkjSaCQLv5xLMcdqC-Xh2gKn1WazeNs1J14aukx84/export?format=csv&gid=147585760"
-
 st.sidebar.markdown(f"🛠️ [Edit Suspicious Anchor List]({SHEET_LINK})")
 
 # === FUNCTIONS ===
-
 def fuzzy_match(col_map, keyword):
+    keyword = keyword.replace(" ", "").lower()
     for key in col_map:
-        if keyword in key.lower():
+        if keyword in key.replace(" ", "").lower():
             return col_map[key]
     return None
 
@@ -36,27 +35,29 @@ def normalize_backlink_df(df):
             ref_url_col: "referring_page_url",
             anchor_col: "anchor"
         }).assign(**{"left context": "", "right context": ""})
-    raise ValueError("Unrecognized format")
+    raise ValueError("Unrecognized format: required backlink columns not found.")
 
 # === BUTTON LOGIC ===
-
 if st.button("🚀 Generate Disavow List"):
-    if not backlink_files or not disavow_file:
-        st.warning("Please upload backlink CSV files and existing disavow.txt.")
+    if not backlink_files:
+        st.warning("Please upload at least one backlink CSV file.")
     else:
         try:
-            # Load curated suspicious anchor list from Google Sheet
+            # Load suspicious anchor terms from Google Sheet
             suspicious_df = pd.read_csv(CSV_EXPORT_URL)
             suspicious_anchors = set(suspicious_df['anchor_text'].dropna().str.strip().str.lower())
 
-            # Load existing disavow file
-            disavow_lines = disavow_file.read().decode("utf-8", errors="ignore").splitlines()
-            existing_domains = {
-                str(line).strip().replace("domain:", "").lower().replace("www.", "")
-                for line in disavow_lines if str(line).strip().startswith("domain:")
-            }
+            # Load existing disavow list (if provided)
+            if disavow_file:
+                disavow_lines = disavow_file.read().decode("utf-8", errors="ignore").splitlines()
+                existing_domains = {
+                    str(line).strip().replace("domain:", "").lower().replace("www.", "")
+                    for line in disavow_lines if str(line).strip().startswith("domain:")
+                }
+            else:
+                existing_domains = set()
 
-            # Normalize and collect all backlinks
+            # Normalize all uploaded backlink files
             all_dfs = []
             for file in backlink_files:
                 try:
@@ -73,14 +74,13 @@ if st.button("🚀 Generate Disavow List"):
             df["full_context"] = df[["left context", "anchor", "right context"]].astype(str).agg(' '.join, axis=1)
             df["anchor_lower"] = df["anchor"].astype(str).str.strip().str.lower()
 
-            # Define regex rules
+            # Define keyword filters
             spam_rules = {
                 'adult': re.compile(r'\b(?:' + '|'.join(["porn", "sex", "camgirl", "escort", "xxx", "anal", "nude"]) + r')\b', re.I),
                 'pharma': re.compile(r'\b(?:' + '|'.join(["penis", "erectile", "enlargement", "enhancement"]) + r')\b', re.I),
                 'seo': re.compile('|'.join(["buy backlinks", "seo tool", "cheap backlinks", "rank booster", "pbn"]), re.I)
             }
 
-            # Apply filters
             matched = df[
                 df['full_context'].str.contains(spam_rules['adult']) |
                 df['anchor_lower'].str.contains(spam_rules['pharma']) |
