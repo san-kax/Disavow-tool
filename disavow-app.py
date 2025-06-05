@@ -112,3 +112,16 @@ if st.button("🚀 Generate Disavow List"):
 
         except Exception as e:
             st.error(f"❌ Something went wrong: {e}")
+
+# === SHOW DOWNLOADS IF AVAILABLE ===
+if "disavow_txt" in st.session_state and "disavow_xlsx" in st.session_state:
+    st.download_button(
+        "⬇️ Download disavow_list.txt",
+        st.session_state["disavow_txt"],
+        file_name="disavow_list.txt"
+    )
+    st.download_button(
+        "⬇️ Download disavow_export.xlsx",
+        st.session_state["disavow_xlsx"],
+        file_name="disavow_export.xlsx"
+    )
