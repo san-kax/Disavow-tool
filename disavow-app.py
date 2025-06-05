@@ -100,15 +100,21 @@ if st.button("🚀 Generate Disavow List"):
                 file_name="disavow_list.txt"
             )
 
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                pd.DataFrame(final_domains, columns=["Referring Domain"]).to_excel(writer, sheet_name="Disavow Domains", index=False)
-                matched.to_excel(writer, sheet_name="Disavow Details", index=False)
-            st.download_button(
-                "⬇️ Download disavow_export.xlsx",
-                output.getvalue(),
-                file_name="disavow_export.xlsx"
-            )
+# Save disavow_list.txt
+disavow_txt = '\n'.join(["domain:" + d for d in final_domains])
+st.session_state["disavow_txt"] = disavow_txt
+
+# Save Excel file
+excel_output = io.BytesIO()
+with pd.ExcelWriter(excel_output, engine='xlsxwriter') as writer:
+    pd.DataFrame(final_domains, columns=["Referring Domain"]).to_excel(writer, sheet_name="Disavow Domains", index=False)
+    matched.to_excel(writer, sheet_name="Disavow Details", index=False)
+excel_output.seek(0)
+st.session_state["disavow_xlsx"] = excel_output.read()
+
+# Buttons
+st.download_button("⬇️ Download disavow_list.txt", st.session_state["disavow_txt"], file_name="disavow_list.txt")
+st.download_button("⬇️ Download disavow_export.xlsx", st.session_state["disavow_xlsx"], file_name="disavow_export.xlsx")
 
         except Exception as e:
             st.error(f"❌ Something went wrong: {e}")
