@@ -152,3 +152,9 @@ if st.button("🔁 Reset App"):
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     st.experimental_rerun()
+# === RESET SESSION STATE ===
+with st.expander("🧹 Reset App"):
+    if st.button("🔁 Clear Uploaded Files & Output"):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.experimental_rerun()
