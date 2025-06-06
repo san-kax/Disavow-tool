@@ -49,7 +49,7 @@ if st.button("🚀 Generate Disavow List"):
                 disavow_lines = disavow_file.read().decode("utf-8", errors="ignore").splitlines()
                 existing_domains = {
                     str(line).strip().replace("domain:", "").lower().replace("www.", "")
-                    for line in disavow_lines if str(line).strip().startswith("domain:")
+                    for line in disavow_lines if str(line).strip().lower().startswith("domain:")
                 }
             else:
                 existing_domains = set()
@@ -108,7 +108,7 @@ if "disavow_txt" in st.session_state and "disavow_xlsx" in st.session_state:
 
 # === MERGE REVIEWED EXCEL + EXISTING DISAVOW ===
 with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
-    reviewed_excel = st.file_uploader("Upload reviewed Excel (e.g. Disavow Details)", type=["xlsx"], key="merge_reviewed_xlsx")
+    reviewed_excel = st.file_uploader("Upload reviewed Excel (Disavow Details tab)", type=["xlsx"], key="merge_reviewed_xlsx")
     existing_disavow = st.file_uploader("Upload previous disavow.txt file", type=["txt"], key="merge_existing_disavow")
 
     if st.button("📄 Generate Merged disavow.txt"):
@@ -116,15 +116,13 @@ with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
             st.warning("Please upload both reviewed Excel and previous disavow.txt.")
         else:
             try:
-                xls = pd.ExcelFile(reviewed_excel, engine="openpyxl")
-                if "Disavow Details" not in xls.sheet_names:
-                    raise ValueError("Expected sheet 'Disavow Details' not found in Excel file.")
+                xls = pd.ExcelFile(reviewed_excel)
                 df_reviewed = xls.parse("Disavow Details")
 
                 if "referring_domain" not in df_reviewed.columns:
-                    raise ValueError("Expected column 'referring_domain' not found in 'Disavow Details'.")
+                    raise ValueError("Missing expected 'referring_domain' column in 'Disavow Details' sheet.")
 
-                reviewed_domains = set(df_reviewed['referring_domain'].dropna().str.strip().str.lower().str.replace("www.", "", regex=False))
+                reviewed_domains = set(df_reviewed["referring_domain"].dropna().str.strip().str.lower().str.replace("www.", "", regex=False))
                 total_reviewed = len(reviewed_domains)
 
                 disavow_lines = existing_disavow.read().decode("utf-8", errors="ignore").splitlines()
