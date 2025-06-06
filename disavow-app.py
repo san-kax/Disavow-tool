@@ -13,7 +13,6 @@ st.sidebar.header("Upload Required Files")
 backlink_files = st.sidebar.file_uploader("Upload backlink CSV files", type="csv", accept_multiple_files=True)
 disavow_file = st.sidebar.file_uploader("Upload existing disavow.txt (optional)", type="txt")
 
-# Suspicious anchor list from Google Sheet
 SHEET_LINK = "https://docs.google.com/spreadsheets/d/1S_fkjSaCQLv5xLMcdqC-Xh2gKn1WazeNs1J14aukx84/edit#gid=147585760"
 CSV_EXPORT_URL = "https://docs.google.com/spreadsheets/d/1S_fkjSaCQLv5xLMcdqC-Xh2gKn1WazeNs1J14aukx84/export?format=csv&gid=147585760"
 st.sidebar.markdown(f"🛠️ [Edit Suspicious Anchor List]({SHEET_LINK})")
@@ -37,7 +36,7 @@ def normalize_backlink_df(df):
         }).assign(**{"left context": "", "right context": ""})
     raise ValueError("Unrecognized format: required backlink columns not found.")
 
-# === DISAVOW GENERATOR ===
+# === GENERATE DISAVOW LIST ===
 if st.button("🚀 Generate Disavow List"):
     if not backlink_files:
         st.warning("Please upload at least one backlink CSV file.")
@@ -102,31 +101,30 @@ if st.button("🚀 Generate Disavow List"):
         except Exception as e:
             st.error(f"❌ Something went wrong: {e}")
 
-# === DOWNLOAD OUTPUTS ===
+# === DOWNLOAD RESULTS ===
 if "disavow_txt" in st.session_state and "disavow_xlsx" in st.session_state:
     st.download_button("⬇️ Download disavow_list.txt", st.session_state["disavow_txt"], file_name="disavow_list.txt", key="download_txt_button")
     st.download_button("⬇️ Download disavow_export.xlsx", st.session_state["disavow_xlsx"], file_name="disavow_export.xlsx", key="download_xlsx_button")
 
 # === MERGE REVIEWED EXCEL + EXISTING DISAVOW ===
-with st.expander("📎 Merge Reviewed Domains with Existing disavow.txt"):
-    reviewed_excel = st.file_uploader("Upload reviewed Excel (from Disavow Details sheet)", type=["xlsx"], key="merge_reviewed_xlsx")
+with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
+    reviewed_excel = st.file_uploader("Upload reviewed Excel (e.g. Disavow Details)", type=["xlsx"], key="merge_reviewed_xlsx")
     existing_disavow = st.file_uploader("Upload previous disavow.txt file", type=["txt"], key="merge_existing_disavow")
 
     if st.button("📄 Generate Merged disavow.txt"):
         if not reviewed_excel or not existing_disavow:
-            st.warning("Please upload both reviewed Excel and disavow.txt.")
+            st.warning("Please upload both reviewed Excel and previous disavow.txt.")
         else:
             try:
                 xls = pd.ExcelFile(reviewed_excel, engine="openpyxl")
                 if "Disavow Details" not in xls.sheet_names:
-                    raise ValueError("Sheet 'Disavow Details' not found in Excel.")
-
+                    raise ValueError("Expected sheet 'Disavow Details' not found in Excel file.")
                 df_reviewed = xls.parse("Disavow Details")
 
                 if "referring_domain" not in df_reviewed.columns:
-                    raise ValueError("Expected column 'referring_domain' not found in 'Disavow Details' sheet.")
+                    raise ValueError("Expected column 'referring_domain' not found in 'Disavow Details'.")
 
-                reviewed_domains = set(df_reviewed["referring_domain"].dropna().str.strip().str.lower().str.replace("www.", "", regex=False))
+                reviewed_domains = set(df_reviewed['referring_domain'].dropna().str.strip().str.lower().str.replace("www.", "", regex=False))
                 total_reviewed = len(reviewed_domains)
 
                 disavow_lines = existing_disavow.read().decode("utf-8", errors="ignore").splitlines()
@@ -146,7 +144,7 @@ with st.expander("📎 Merge Reviewed Domains with Existing disavow.txt"):
 ✅ Merged disavow file created!
 
 • Total reviewed: **{total_reviewed}**
-• Already in disavow file: **{len(already_present)}**
+• Already present: **{len(already_present)}**
 • Newly added: **{len(new_domains)}**
 """)
                 st.download_button("⬇️ Download merged_disavow.txt", final_text, file_name="merged_disavow.txt")
@@ -157,6 +155,5 @@ with st.expander("📎 Merge Reviewed Domains with Existing disavow.txt"):
 # === RESET APP ===
 with st.expander("🧹 Reset App"):
     if st.button("🔁 Clear All Uploaded Files & Results"):
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.success("✅ App state cleared. You may reload the page if needed.")
+        st.session_state.clear()
+        st.experimental_rerun()
