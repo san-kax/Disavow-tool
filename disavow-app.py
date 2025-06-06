@@ -146,15 +146,8 @@ with st.expander("📎 Merge Reviewed Domains with Existing Disavow File"):
             except Exception as e:
                 st.error(f"❌ Error merging disavow files: {e}")
 
-# === RESET BUTTON ===
-st.markdown("---")
-if st.button("🔁 Reset App"):
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    st.experimental_rerun()
-# === RESET SESSION STATE ===
+# === RESET APP ===
 with st.expander("🧹 Reset App"):
-    if st.button("🔁 Clear Uploaded Files & Output"):
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
+    if st.button("🔁 Clear All Uploaded Files & Results"):
+        st.session_state.clear()
         st.experimental_rerun()
