@@ -116,23 +116,19 @@ with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
             st.warning("Please upload both reviewed Excel and disavow.txt file.")
         else:
             try:
+                # Parse reviewed Excel and extract domains from `referring_page_url` in "Disavow Details"
                 xls = pd.ExcelFile(reviewed_excel, engine="openpyxl")
-                # Search all sheets for referring_domain
-                domain_col = None
-                df_reviewed = None
-                for sheet in xls.sheet_names:
-                    df = xls.parse(sheet)
-                    for col in df.columns:
-                        if col.strip().lower() == "referring_domain":
-                            domain_col = col
-                            df_reviewed = df
-                            break
-                    if df_reviewed is not None:
-                        break
-                if df_reviewed is None:
-                    raise ValueError("No sheet with 'referring_domain' column found.")
+                if "Disavow Details" not in xls.sheet_names:
+                    raise ValueError("Sheet 'Disavow Details' not found.")
+                df_reviewed = xls.parse("Disavow Details")
+                if "referring_page_url" not in df_reviewed.columns:
+                    raise ValueError("Column 'referring_page_url' not found in 'Disavow Details' sheet.")
 
-                reviewed_domains = set(df_reviewed[domain_col].dropna().astype(str).str.strip().str.lower().str.replace("www.", "", regex=False))
+                reviewed_domains = df_reviewed["referring_page_url"].dropna().apply(
+                    lambda x: urlparse(str(x)).netloc.lower().replace("www.", "")
+                )
+                reviewed_domains = set(d for d in reviewed_domains if d)
+
                 total_reviewed = len(reviewed_domains)
 
                 disavow_lines = existing_disavow.read().decode("utf-8", errors="ignore").splitlines()
