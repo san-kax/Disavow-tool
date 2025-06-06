@@ -43,11 +43,9 @@ if st.button("🚀 Generate Disavow List"):
         st.warning("Please upload at least one backlink CSV file.")
     else:
         try:
-            # Load suspicious anchor terms from Google Sheet
             suspicious_df = pd.read_csv(CSV_EXPORT_URL)
             suspicious_anchors = set(suspicious_df['anchor_text'].dropna().str.strip().str.lower())
 
-            # Load existing disavow list (if provided)
             if disavow_file:
                 disavow_lines = disavow_file.read().decode("utf-8", errors="ignore").splitlines()
                 existing_domains = {
@@ -57,7 +55,6 @@ if st.button("🚀 Generate Disavow List"):
             else:
                 existing_domains = set()
 
-            # Normalize all uploaded backlink files
             all_dfs = []
             for file in backlink_files:
                 try:
@@ -74,7 +71,6 @@ if st.button("🚀 Generate Disavow List"):
             df["full_context"] = df[["left context", "anchor", "right context"]].astype(str).agg(' '.join, axis=1)
             df["anchor_lower"] = df["anchor"].astype(str).str.strip().str.lower()
 
-            # Define keyword filters
             spam_rules = {
                 'adult': re.compile(r'\b(?:' + '|'.join(["porn", "sex", "camgirl", "escort", "xxx", "anal", "nude"]) + r')\b', re.I),
                 'pharma': re.compile(r'\b(?:' + '|'.join(["penis", "erectile", "enlargement", "enhancement"]) + r')\b', re.I),
@@ -91,14 +87,11 @@ if st.button("🚀 Generate Disavow List"):
             matched = matched[~matched['referring_domain'].isin(existing_domains)]
             final_domains = sorted(set(matched['referring_domain']))
 
-            # === OUTPUT ===
-            st.success(f"🎯 {len(final_domains)} new spammy domains detected.")
+            st.success(f"🌟 {len(final_domains)} new spammy domains detected.")
 
-            # Save disavow_list.txt to session
             disavow_txt = '\n'.join(["domain:" + d for d in final_domains])
             st.session_state["disavow_txt"] = disavow_txt
 
-            # Save Excel file to session
             excel_output = io.BytesIO()
             with pd.ExcelWriter(excel_output, engine='xlsxwriter') as writer:
                 pd.DataFrame(final_domains, columns=["Referring Domain"]).to_excel(writer, sheet_name="Disavow Domains", index=False)
@@ -111,15 +104,51 @@ if st.button("🚀 Generate Disavow List"):
 
 # === SHOW DOWNLOADS IF AVAILABLE ===
 if "disavow_txt" in st.session_state and "disavow_xlsx" in st.session_state:
-    st.download_button(
-        "⬇️ Download disavow_list.txt",
-        st.session_state["disavow_txt"],
-        file_name="disavow_list.txt",
-        key="download_txt_button"
-    )
-    st.download_button(
-        "⬇️ Download disavow_export.xlsx",
-        st.session_state["disavow_xlsx"],
-        file_name="disavow_export.xlsx",
-        key="download_xlsx_button"
-    )
+    st.download_button("⬇️ Download disavow_list.txt", st.session_state["disavow_txt"], file_name="disavow_list.txt", key="download_txt_button")
+    st.download_button("⬇️ Download disavow_export.xlsx", st.session_state["disavow_xlsx"], file_name="disavow_export.xlsx", key="download_xlsx_button")
+
+# === MERGE REVIEWED + EXISTING DISAVOW ===
+with st.expander("📎 Merge Reviewed Domains with Existing Disavow File"):
+    reviewed_excel = st.file_uploader("Upload your reviewed Excel (disavow_export*.xlsx)", type=["xlsx"], key="merge_reviewed_xlsx")
+    existing_disavow = st.file_uploader("Upload your previous Google disavow.txt", type=["txt"], key="merge_old_disavow")
+
+    if st.button("📄 Generate Merged disavow.txt"):
+        if not reviewed_excel or not existing_disavow:
+            st.warning("Please upload both reviewed Excel and previous disavow.txt.")
+        else:
+            try:
+                df_reviewed = pd.read_excel(reviewed_excel, sheet_name="Disavow Domains")
+                reviewed_domains = set(df_reviewed.iloc[:, 0].dropna().str.strip().str.lower().str.replace("www.", ""))
+                total_reviewed = len(reviewed_domains)
+
+                disavow_lines = existing_disavow.read().decode("utf-8", errors="ignore").splitlines()
+                existing_domains = {
+                    line.strip().lower().replace("domain:", "").replace("www.", "")
+                    for line in disavow_lines if line.strip().startswith("domain:")
+                }
+
+                new_domains = sorted(reviewed_domains - existing_domains)
+                already_present = reviewed_domains & existing_domains
+
+                final_lines = disavow_lines + [f"domain:{d}" for d in new_domains]
+                final_text = '\n'.join(final_lines)
+
+                st.success(f"""
+✅ Merged disavow file ready!
+
+- Total reviewed domains: **{total_reviewed}**
+- Already present in old file: **{len(already_present)}**
+- New domains added: **{len(new_domains)}**
+""")
+
+                st.download_button("⬇️ Download merged_disavow.txt", final_text, file_name="merged_disavow.txt", key="merged_download")
+
+            except Exception as e:
+                st.error(f"❌ Error merging disavow files: {e}")
+
+# === RESET BUTTON ===
+st.markdown("---")
+if st.button("🔁 Reset App"):
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.experimental_rerun()
