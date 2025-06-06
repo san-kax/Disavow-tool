@@ -158,7 +158,11 @@ with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
             except Exception as e:
                 st.error(f"❌ Error merging files: {e}")
 
-# Optional: Reset in Sidebar
+# ✅ Safer Reset Approach
 if st.sidebar.button("🔄 Reset App"):
+    st.session_state["reset_trigger"] = True
+
+if st.session_state.get("reset_trigger"):
     st.session_state.clear()
     st.experimental_rerun()
+
