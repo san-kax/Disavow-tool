@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 import io
 
 # === PAGE SETUP ===
-st.set_page_config(page_title="Disavow Combiner", layout="wide")
+st.set_page_config(page_title="Disavow Tool", layout="wide")
 st.title("🔗 Disavow Tool")
 
 # === SIDEBAR ===
@@ -13,7 +13,6 @@ st.sidebar.header("Upload Required Files")
 backlink_files = st.sidebar.file_uploader("Upload backlink CSV files", type="csv", accept_multiple_files=True)
 disavow_file = st.sidebar.file_uploader("Upload existing disavow.txt (optional)", type="txt")
 
-# Google Sheet for suspicious anchor list
 SHEET_LINK = "https://docs.google.com/spreadsheets/d/1S_fkjSaCQLv5xLMcdqC-Xh2gKn1WazeNs1J14aukx84/edit#gid=147585760"
 CSV_EXPORT_URL = "https://docs.google.com/spreadsheets/d/1S_fkjSaCQLv5xLMcdqC-Xh2gKn1WazeNs1J14aukx84/export?format=csv&gid=147585760"
 st.sidebar.markdown(f"🛠️ [Edit Suspicious Anchor List]({SHEET_LINK})")
@@ -37,7 +36,7 @@ def normalize_backlink_df(df):
         }).assign(**{"left context": "", "right context": ""})
     raise ValueError("Unrecognized format: required backlink columns not found.")
 
-# === BUTTON LOGIC ===
+# === GENERATE DISAVOW LIST ===
 if st.button("🚀 Generate Disavow List"):
     if not backlink_files:
         st.warning("Please upload at least one backlink CSV file.")
@@ -102,49 +101,57 @@ if st.button("🚀 Generate Disavow List"):
         except Exception as e:
             st.error(f"❌ Something went wrong: {e}")
 
-# === SHOW DOWNLOADS IF AVAILABLE ===
+# === DOWNLOAD RESULTS ===
 if "disavow_txt" in st.session_state and "disavow_xlsx" in st.session_state:
     st.download_button("⬇️ Download disavow_list.txt", st.session_state["disavow_txt"], file_name="disavow_list.txt", key="download_txt_button")
     st.download_button("⬇️ Download disavow_export.xlsx", st.session_state["disavow_xlsx"], file_name="disavow_export.xlsx", key="download_xlsx_button")
 
-# === MERGE REVIEWED + EXISTING DISAVOW ===
-with st.expander("📎 Merge Reviewed Domains with Existing Disavow File"):
-    reviewed_excel = st.file_uploader("Upload your reviewed Excel (disavow_export*.xlsx)", type=["xlsx"], key="merge_reviewed_xlsx")
-    existing_disavow = st.file_uploader("Upload your previous Google disavow.txt", type=["txt"], key="merge_old_disavow")
+# === MERGE REVIEWED EXCEL + EXISTING DISAVOW ===
+with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
+    reviewed_excel = st.file_uploader("Upload reviewed Excel (e.g. Disavow Details)", type=["xlsx"], key="merge_reviewed_xlsx")
+    existing_disavow = st.file_uploader("Upload previous disavow.txt file", type=["txt"], key="merge_existing_disavow")
 
     if st.button("📄 Generate Merged disavow.txt"):
         if not reviewed_excel or not existing_disavow:
             st.warning("Please upload both reviewed Excel and previous disavow.txt.")
         else:
             try:
-                df_reviewed = pd.read_excel(reviewed_excel, sheet_name="Disavow Domains")
-                reviewed_domains = set(df_reviewed.iloc[:, 0].dropna().str.strip().str.lower().str.replace("www.", ""))
+                xls = pd.ExcelFile(reviewed_excel, engine="openpyxl")
+                if "Disavow Details" in xls.sheet_names:
+                    df_reviewed = xls.parse("Disavow Details")
+                else:
+                    df_reviewed = xls.parse(xls.sheet_names[0])
+
+                if "referring_domain" not in df_reviewed.columns:
+                    raise ValueError("Expected column 'referring_domain' not found.")
+
+                reviewed_domains = set(df_reviewed['referring_domain'].dropna().str.strip().str.lower().str.replace("www.", "", regex=False))
                 total_reviewed = len(reviewed_domains)
 
                 disavow_lines = existing_disavow.read().decode("utf-8", errors="ignore").splitlines()
+                preserved_lines = [line for line in disavow_lines if not line.strip().lower().startswith("domain:")]
                 existing_domains = {
                     line.strip().lower().replace("domain:", "").replace("www.", "")
-                    for line in disavow_lines if line.strip().startswith("domain:")
+                    for line in disavow_lines if line.strip().lower().startswith("domain:")
                 }
 
                 new_domains = sorted(reviewed_domains - existing_domains)
                 already_present = reviewed_domains & existing_domains
 
-                final_lines = disavow_lines + [f"domain:{d}" for d in new_domains]
+                final_lines = preserved_lines + [f"domain:{d}" for d in sorted(existing_domains)] + [f"domain:{d}" for d in new_domains]
                 final_text = '\n'.join(final_lines)
 
                 st.success(f"""
-✅ Merged disavow file ready!
+✅ Merged disavow file created!
 
-- Total reviewed domains: **{total_reviewed}**
-- Already present in old file: **{len(already_present)}**
-- New domains added: **{len(new_domains)}**
+• Total reviewed: **{total_reviewed}**
+• Already present: **{len(already_present)}**
+• Newly added: **{len(new_domains)}**
 """)
-
-                st.download_button("⬇️ Download merged_disavow.txt", final_text, file_name="merged_disavow.txt", key="merged_download")
+                st.download_button("⬇️ Download merged_disavow.txt", final_text, file_name="merged_disavow.txt")
 
             except Exception as e:
-                st.error(f"❌ Error merging disavow files: {e}")
+                st.error(f"❌ Error merging files: {e}")
 
 # === RESET APP ===
 with st.expander("🧹 Reset App"):
