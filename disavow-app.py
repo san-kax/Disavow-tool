@@ -13,12 +13,11 @@ st.sidebar.header("Upload Required Files")
 backlink_files = st.sidebar.file_uploader("Upload backlink CSV files", type="csv", accept_multiple_files=True)
 disavow_file = st.sidebar.file_uploader("Upload existing disavow.txt (optional)", type="txt")
 
-# === CONFIG ===
 SHEET_LINK = "https://docs.google.com/spreadsheets/d/1S_fkjSaCQLv5xLMcdqC-Xh2gKn1WazeNs1J14aukx84/edit#gid=147585760"
 CSV_EXPORT_URL = "https://docs.google.com/spreadsheets/d/1S_fkjSaCQLv5xLMcdqC-Xh2gKn1WazeNs1J14aukx84/export?format=csv&gid=147585760"
 st.sidebar.markdown(f"🛠️ [Edit Suspicious Anchor List]({SHEET_LINK})")
 
-# === HELPERS ===
+# === FUNCTIONS ===
 def fuzzy_match(col_map, keyword):
     keyword = keyword.replace(" ", "").lower()
     for key in col_map:
@@ -31,7 +30,10 @@ def normalize_backlink_df(df):
     ref_url_col = fuzzy_match(col_map, "source url") or fuzzy_match(col_map, "referring page url") or fuzzy_match(col_map, "referring url")
     anchor_col = fuzzy_match(col_map, "anchor") or fuzzy_match(col_map, "anchor text")
     if ref_url_col and anchor_col:
-        return df.rename(columns={ref_url_col: "referring_page_url", anchor_col: "anchor"}).assign(**{"left context": "", "right context": ""})
+        return df.rename(columns={
+            ref_url_col: "referring_page_url",
+            anchor_col: "anchor"
+        }).assign(**{"left context": "", "right context": ""})
     raise ValueError("Unrecognized format: required backlink columns not found.")
 
 # === GENERATE DISAVOW LIST ===
@@ -47,7 +49,7 @@ if st.button("🚀 Generate Disavow List"):
                 disavow_lines = disavow_file.read().decode("utf-8", errors="ignore").splitlines()
                 existing_domains = {
                     str(line).strip().replace("domain:", "").lower().replace("www.", "")
-                    for line in disavow_lines if str(line).strip().lower().startswith("domain:")
+                    for line in disavow_lines if str(line).strip().startswith("domain:")
                 }
             else:
                 existing_domains = set()
@@ -91,7 +93,7 @@ if st.button("🚀 Generate Disavow List"):
 
             excel_output = io.BytesIO()
             with pd.ExcelWriter(excel_output, engine='xlsxwriter') as writer:
-                pd.DataFrame(final_domains, columns=["Referring Domain"]).to_excel(writer, sheet_name="Disavow Domains", index=False)
+                pd.DataFrame(final_domains, columns=["referring_domain"]).to_excel(writer, sheet_name="Disavow Domains", index=False)
                 matched.to_excel(writer, sheet_name="Disavow Details", index=False)
             excel_output.seek(0)
             st.session_state["disavow_xlsx"] = excel_output.read()
@@ -106,22 +108,31 @@ if "disavow_txt" in st.session_state and "disavow_xlsx" in st.session_state:
 
 # === MERGE REVIEWED EXCEL + EXISTING DISAVOW ===
 with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
-    reviewed_excel = st.file_uploader("Upload reviewed Excel (from Disavow Details sheet)", type=["xlsx"], key="merge_reviewed_xlsx")
-    existing_disavow = st.file_uploader("Upload previous disavow.txt file", type=["txt"], key="merge_existing_disavow")
+    reviewed_excel = st.file_uploader("Upload reviewed Excel file (e.g. Disavow Details tab)", type=["xlsx"], key="merge_reviewed_xlsx")
+    existing_disavow = st.file_uploader("Upload previous disavow.txt", type=["txt"], key="merge_existing_disavow")
 
     if st.button("📄 Generate Merged disavow.txt"):
         if not reviewed_excel or not existing_disavow:
-            st.warning("Please upload both reviewed Excel and previous disavow.txt.")
+            st.warning("Please upload both reviewed Excel and disavow.txt file.")
         else:
             try:
                 xls = pd.ExcelFile(reviewed_excel, engine="openpyxl")
-                sheet_to_use = "Disavow Details" if "Disavow Details" in xls.sheet_names else xls.sheet_names[0]
-                df_reviewed = xls.parse(sheet_to_use)
+                # Search all sheets for referring_domain
+                domain_col = None
+                df_reviewed = None
+                for sheet in xls.sheet_names:
+                    df = xls.parse(sheet)
+                    for col in df.columns:
+                        if col.strip().lower() == "referring_domain":
+                            domain_col = col
+                            df_reviewed = df
+                            break
+                    if df_reviewed is not None:
+                        break
+                if df_reviewed is None:
+                    raise ValueError("No sheet with 'referring_domain' column found.")
 
-                if "referring_domain" not in df_reviewed.columns:
-                    raise ValueError("Expected column 'referring_domain' not found in reviewed Excel file.")
-
-                reviewed_domains = set(df_reviewed['referring_domain'].dropna().astype(str).str.strip().str.lower().str.replace("www.", "", regex=False))
+                reviewed_domains = set(df_reviewed[domain_col].dropna().astype(str).str.strip().str.lower().str.replace("www.", "", regex=False))
                 total_reviewed = len(reviewed_domains)
 
                 disavow_lines = existing_disavow.read().decode("utf-8", errors="ignore").splitlines()
