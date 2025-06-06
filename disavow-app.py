@@ -108,7 +108,7 @@ if "disavow_txt" in st.session_state and "disavow_xlsx" in st.session_state:
 
 # === MERGE REVIEWED EXCEL + EXISTING DISAVOW ===
 with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
-    reviewed_excel = st.file_uploader("Upload reviewed Excel (must include 'Disavow Details')", type=["xlsx"], key="merge_reviewed_xlsx")
+    reviewed_excel = st.file_uploader("Upload reviewed Excel (Disavow Details)", type=["xlsx"], key="merge_reviewed_xlsx")
     existing_disavow = st.file_uploader("Upload previous disavow.txt file", type=["txt"], key="merge_existing_disavow")
 
     if st.button("📄 Generate Merged disavow.txt"):
@@ -118,13 +118,20 @@ with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
             try:
                 xls = pd.ExcelFile(reviewed_excel, engine="openpyxl")
                 if "Disavow Details" not in xls.sheet_names:
-                    raise ValueError("Expected sheet 'Disavow Details' not found.")
-                df_reviewed = xls.parse("Disavow Details")
+                    raise ValueError("❌ Sheet 'Disavow Details' not found in Excel file.")
+                df_details = xls.parse("Disavow Details")
 
-                if "referring_domain" not in df_reviewed.columns:
-                    raise ValueError("Expected column 'referring_domain' not found.")
+                if "referring_domain" not in df_details.columns:
+                    raise ValueError("❌ Column 'referring_domain' missing in Disavow Details sheet.")
 
-                reviewed_domains = set(df_reviewed["referring_domain"].dropna().str.strip().str.lower().str.replace("www.", "", regex=False))
+                reviewed_domains = set(
+                    df_details["referring_domain"]
+                    .dropna()
+                    .astype(str)
+                    .str.strip()
+                    .str.lower()
+                    .str.replace("www.", "", regex=False)
+                )
                 total_reviewed = len(reviewed_domains)
 
                 disavow_lines = existing_disavow.read().decode("utf-8", errors="ignore").splitlines()
@@ -156,4 +163,4 @@ with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
 with st.expander("🧹 Reset App"):
     if st.button("🔁 Clear All Uploaded Files & Results"):
         st.session_state.clear()
-        st.rerun()
+        st.experimental_rerun()
