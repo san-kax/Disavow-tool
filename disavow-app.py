@@ -30,10 +30,13 @@ def normalize_backlink_df(df):
     ref_url_col = fuzzy_match(col_map, "source url") or fuzzy_match(col_map, "referring page url") or fuzzy_match(col_map, "referring url")
     anchor_col = fuzzy_match(col_map, "anchor") or fuzzy_match(col_map, "anchor text")
     if ref_url_col and anchor_col:
-        return df.rename(columns={ref_url_col: "referring_page_url", anchor_col: "anchor"}).assign(**{"left context": "", "right context": ""})
+        return df.rename(columns={
+            ref_url_col: "referring_page_url",
+            anchor_col: "anchor"
+        }).assign(**{"left context": "", "right context": ""})
     raise ValueError("Unrecognized format: required backlink columns not found.")
 
-# === DISAVOW GENERATION ===
+# === GENERATE DISAVOW LIST ===
 if st.button("🚀 Generate Disavow List"):
     if not backlink_files:
         st.warning("Please upload at least one backlink CSV file.")
@@ -98,14 +101,14 @@ if st.button("🚀 Generate Disavow List"):
         except Exception as e:
             st.error(f"❌ Something went wrong: {e}")
 
-# === DOWNLOAD SECTION ===
+# === DOWNLOAD RESULTS ===
 if "disavow_txt" in st.session_state and "disavow_xlsx" in st.session_state:
     st.download_button("⬇️ Download disavow_list.txt", st.session_state["disavow_txt"], file_name="disavow_list.txt", key="download_txt_button")
     st.download_button("⬇️ Download disavow_export.xlsx", st.session_state["disavow_xlsx"], file_name="disavow_export.xlsx", key="download_xlsx_button")
 
-# === MERGE REVIEWED DISAVOW ===
+# === MERGE REVIEWED EXCEL + EXISTING DISAVOW ===
 with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
-    reviewed_excel = st.file_uploader("Upload reviewed Excel (must contain 'Disavow Details')", type=["xlsx"], key="merge_reviewed_xlsx")
+    reviewed_excel = st.file_uploader("Upload reviewed Excel (must include 'Disavow Details')", type=["xlsx"], key="merge_reviewed_xlsx")
     existing_disavow = st.file_uploader("Upload previous disavow.txt file", type=["txt"], key="merge_existing_disavow")
 
     if st.button("📄 Generate Merged disavow.txt"):
@@ -115,12 +118,13 @@ with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
             try:
                 xls = pd.ExcelFile(reviewed_excel, engine="openpyxl")
                 if "Disavow Details" not in xls.sheet_names:
-                    raise ValueError("Sheet 'Disavow Details' not found.")
+                    raise ValueError("Expected sheet 'Disavow Details' not found.")
                 df_reviewed = xls.parse("Disavow Details")
-                if "referring_domain" not in df_reviewed.columns:
-                    raise ValueError("Column 'referring_domain' not found in 'Disavow Details'.")
 
-                reviewed_domains = set(df_reviewed['referring_domain'].dropna().str.strip().str.lower().str.replace("www.", "", regex=False))
+                if "referring_domain" not in df_reviewed.columns:
+                    raise ValueError("Expected column 'referring_domain' not found.")
+
+                reviewed_domains = set(df_reviewed["referring_domain"].dropna().str.strip().str.lower().str.replace("www.", "", regex=False))
                 total_reviewed = len(reviewed_domains)
 
                 disavow_lines = existing_disavow.read().decode("utf-8", errors="ignore").splitlines()
@@ -148,7 +152,7 @@ with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
             except Exception as e:
                 st.error(f"❌ Error merging files: {e}")
 
-# === RESET ===
+# === RESET APP ===
 with st.expander("🧹 Reset App"):
     if st.button("🔁 Clear All Uploaded Files & Results"):
         st.session_state.clear()
