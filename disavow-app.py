@@ -106,48 +106,51 @@ if "disavow_txt" in st.session_state and "disavow_xlsx" in st.session_state:
     st.download_button("⬇️ Download disavow_list.txt", st.session_state["disavow_txt"], file_name="disavow_list.txt", key="download_txt_button")
     st.download_button("⬇️ Download disavow_export.xlsx", st.session_state["disavow_xlsx"], file_name="disavow_export.xlsx", key="download_xlsx_button")
 
-# === MERGE REVIEWED EXCEL + EXISTING DISAVOW ===
+# === MERGE REVIEWED EXCEL + EXISTING DISAVOW (STRICT PRESERVE MODE) ===
 with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
-    reviewed_excel = st.file_uploader("Upload reviewed Excel file (e.g. Disavow Details tab)", type=["xlsx"], key="merge_reviewed_xlsx")
-    existing_disavow = st.file_uploader("Upload previous disavow.txt", type=["txt"], key="merge_existing_disavow")
+    reviewed_excel = st.file_uploader("Upload reviewed Excel (Disavow Details tab)", type=["xlsx"], key="merge_reviewed_xlsx")
+    existing_disavow = st.file_uploader("Upload previous disavow.txt file", type=["txt"], key="merge_existing_disavow")
 
     if st.button("📄 Generate Merged disavow.txt"):
         if not reviewed_excel or not existing_disavow:
-            st.warning("Please upload both reviewed Excel and disavow.txt file.")
+            st.warning("Please upload both reviewed Excel and previous disavow.txt.")
         else:
             try:
-                # Parse reviewed Excel and extract domains from `referring_page_url` in "Disavow Details"
-                xls = pd.ExcelFile(reviewed_excel, engine="openpyxl")
-                if "Disavow Details" not in xls.sheet_names:
-                    raise ValueError("Sheet 'Disavow Details' not found.")
-                df_reviewed = xls.parse("Disavow Details")
-                if "referring_page_url" not in df_reviewed.columns:
-                    raise ValueError("Column 'referring_page_url' not found in 'Disavow Details' sheet.")
-
-                reviewed_domains = df_reviewed["referring_page_url"].dropna().apply(
-                    lambda x: urlparse(str(x)).netloc.lower().replace("www.", "")
-                )
-                reviewed_domains = set(d for d in reviewed_domains if d)
-
-                total_reviewed = len(reviewed_domains)
-
+                # Load disavow.txt content as-is
                 disavow_lines = existing_disavow.read().decode("utf-8", errors="ignore").splitlines()
-                preserved_lines = [line for line in disavow_lines if not line.strip().lower().startswith("domain:")]
+
+                # Extract existing domains from domain: lines
                 existing_domains = {
                     line.strip().lower().replace("domain:", "").replace("www.", "")
                     for line in disavow_lines if line.strip().lower().startswith("domain:")
                 }
 
+                # Read reviewed Excel and get domains from referring_page_url
+                xls = pd.ExcelFile(reviewed_excel, engine="openpyxl")
+                if "Disavow Details" not in xls.sheet_names:
+                    raise ValueError("Sheet 'Disavow Details' not found in reviewed Excel.")
+
+                df = xls.parse("Disavow Details")
+                if "referring_page_url" not in df.columns:
+                    raise ValueError("Column 'referring_page_url' not found in 'Disavow Details'.")
+
+                reviewed_domains = df["referring_page_url"].dropna().apply(
+                    lambda x: urlparse(str(x)).netloc.lower().replace("www.", "")
+                )
+                reviewed_domains = set(d for d in reviewed_domains if d)
+
+                # Find only truly new domains to add
                 new_domains = sorted(reviewed_domains - existing_domains)
                 already_present = reviewed_domains & existing_domains
 
-                final_lines = preserved_lines + [f"domain:{d}" for d in sorted(existing_domains)] + [f"domain:{d}" for d in new_domains]
-                final_text = '\n'.join(final_lines)
+                # Keep existing file untouched, append new domain lines only
+                merged_lines = disavow_lines + [f"domain:{d}" for d in new_domains]
+                final_text = '\n'.join(merged_lines)
 
                 st.success(f"""
 ✅ Merged disavow file created!
 
-• Total reviewed: **{total_reviewed}**
+• Total reviewed: **{len(reviewed_domains)}**
 • Already present: **{len(already_present)}**
 • Newly added: **{len(new_domains)}**
 """)
@@ -155,9 +158,3 @@ with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
 
             except Exception as e:
                 st.error(f"❌ Error merging files: {e}")
-
-# === RESET APP ===
-with st.expander("🧹 Reset App"):
-    if st.button("🔁 Clear All Uploaded Files & Results"):
-        st.session_state.clear()
-        st.experimental_rerun()
