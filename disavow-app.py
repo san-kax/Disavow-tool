@@ -57,9 +57,61 @@ if st.button("🚀 Generate Disavow List"):
             all_dfs = []
             for file in backlink_files:
                 try:
-                    df = pd.read_csv(file, encoding="ISO-8859-1", engine="python")
-                    if df.empty or len(df.columns) == 0:
-                        raise ValueError("Empty or malformed CSV.")
+                    # Try multiple encoding and parsing strategies
+                    df = None
+                    encodings = ["utf-8", "ISO-8859-1", "latin-1", "cp1252"]
+                    engines = ["c", "python"]
+                    
+                    # Check pandas version for backward compatibility
+                    pandas_version = pd.__version__
+                    use_on_bad_lines = tuple(map(int, pandas_version.split('.')[:2])) >= (1, 3)
+                    
+                    for encoding in encodings:
+                        for engine in engines:
+                            # Try different quoting strategies for malformed CSVs
+                            quoting_options = [None, 3, 0] if engine == "python" else [None]
+                            
+                            for quoting in quoting_options:
+                                try:
+                                    file.seek(0)  # Reset file pointer
+                                    
+                                    # Build read_csv parameters
+                                    read_params = {
+                                        "encoding": encoding,
+                                        "engine": engine,
+                                        "skipinitialspace": True,
+                                    }
+                                    
+                                    if quoting is not None:
+                                        read_params["quoting"] = quoting
+                                    
+                                    if engine == "c":
+                                        read_params["low_memory"] = False
+                                    else:
+                                        read_params["sep"] = ","
+                                    
+                                    # Add error handling parameter based on pandas version
+                                    if use_on_bad_lines:
+                                        read_params["on_bad_lines"] = "skip"
+                                    else:
+                                        read_params["error_bad_lines"] = False
+                                        read_params["warn_bad_lines"] = False
+                                    
+                                    df = pd.read_csv(file, **read_params)
+                                    
+                                    if df is not None and not df.empty and len(df.columns) > 0:
+                                        break
+                                except Exception:
+                                    continue
+                            
+                            if df is not None and not df.empty and len(df.columns) > 0:
+                                break
+                        if df is not None and not df.empty and len(df.columns) > 0:
+                            break
+                    
+                    if df is None or df.empty or len(df.columns) == 0:
+                        raise ValueError("Could not parse CSV with any encoding/engine combination or file is empty.")
+                    
                     norm = normalize_backlink_df(df)
                     all_dfs.append(norm)
                 except Exception as e:
