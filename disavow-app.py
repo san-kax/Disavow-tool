@@ -25,6 +25,14 @@ def fuzzy_match(col_map, keyword):
             return col_map[key]
     return None
 
+def is_covered_by_existing(domain, existing_domains):
+    """Return True if domain is already covered by existing_domains.
+    Covers exact matches and subdomains (blog.example.com covered by example.com).
+    """
+    if domain in existing_domains:
+        return True
+    return any(domain.endswith("." + root) for root in existing_domains)
+
 def normalize_backlink_df(df):
     col_map = {col.lower().strip(): col for col in df.columns}
     ref_url_col = fuzzy_match(col_map, "source url") or fuzzy_match(col_map, "referring page url") or fuzzy_match(col_map, "referring url")
@@ -154,7 +162,7 @@ if st.button("🚀 Generate Disavow List"):
                 df['anchor_lower'].apply(lambda x: any(p in x for p in suspicious_anchors))
             ]
 
-            matched = matched[~matched['referring_domain'].isin(existing_domains)]
+            matched = matched[~matched['referring_domain'].apply(lambda d: is_covered_by_existing(d, existing_domains))]
             final_domains = sorted(set(matched['referring_domain']))
 
             st.success(f"🌟 {len(final_domains)} new spammy domains detected.")
@@ -209,9 +217,9 @@ with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
                 )
                 reviewed_domains = set(d for d in reviewed_domains if d)
 
-                # Find new domains only
-                new_domains = sorted(reviewed_domains - existing_domains)
-                already_present = reviewed_domains & existing_domains
+                # Find new domains only (skip subdomains of already-disavowed roots)
+                new_domains = sorted(d for d in reviewed_domains if not is_covered_by_existing(d, existing_domains))
+                already_present = {d for d in reviewed_domains if is_covered_by_existing(d, existing_domains)}
 
                 # Final output
                 final_lines = disavow_lines + [f"domain:{d}" for d in new_domains]
