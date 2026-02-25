@@ -42,14 +42,18 @@ if st.button("🚀 Generate Disavow List"):
         st.warning("Please upload at least one backlink CSV file.")
     else:
         try:
-            suspicious_df = pd.read_csv(CSV_EXPORT_URL)
-            suspicious_anchors = set(suspicious_df['anchor_text'].dropna().str.strip().str.lower())
+            try:
+                suspicious_df = pd.read_csv(CSV_EXPORT_URL)
+                suspicious_anchors = set(suspicious_df['anchor_text'].dropna().str.strip().str.lower())
+            except Exception as sheet_err:
+                st.warning(f"⚠️ Could not load suspicious anchor list (using empty set): {sheet_err}")
+                suspicious_anchors = set()
 
             if disavow_file:
                 disavow_lines = disavow_file.read().decode("utf-8", errors="ignore").splitlines()
                 existing_domains = {
-                    str(line).strip().replace("domain:", "").lower().replace("www.", "")
-                    for line in disavow_lines if str(line).strip().startswith("domain:")
+                    line.strip().lower().replace("domain:", "").replace("www.", "")
+                    for line in disavow_lines if line.strip().lower().startswith("domain:")
                 }
             else:
                 existing_domains = set()
@@ -63,8 +67,13 @@ if st.button("🚀 Generate Disavow List"):
                     engines = ["c", "python"]
                     
                     # Check pandas version for backward compatibility
-                    pandas_version = pd.__version__
-                    use_on_bad_lines = tuple(map(int, pandas_version.split('.')[:2])) >= (1, 3)
+                    try:
+                        from packaging.version import Version
+                        use_on_bad_lines = Version(pd.__version__) >= Version("1.3")
+                    except Exception:
+                        # Fallback: parse only the first two numeric parts
+                        parts = re.match(r"(\d+)\.(\d+)", pd.__version__)
+                        use_on_bad_lines = (int(parts.group(1)), int(parts.group(2))) >= (1, 3) if parts else True
                     
                     for encoding in encodings:
                         for engine in engines:
@@ -117,15 +126,25 @@ if st.button("🚀 Generate Disavow List"):
                 except Exception as e:
                     st.warning(f"⚠️ Skipped {file.name}: {e}")
 
+            if not all_dfs:
+                st.error("❌ No files could be parsed. Please check your CSV format.")
+                st.stop()
+
             df = pd.concat(all_dfs, ignore_index=True)
-            df['referring_domain'] = df['referring_page_url'].apply(lambda x: urlparse(str(x)).netloc.lower().replace("www.", ""))
+            def extract_domain(url):
+                s = str(url).strip()
+                if s and not s.startswith(("http://", "https://")):
+                    s = "http://" + s
+                return urlparse(s).netloc.lower().replace("www.", "")
+
+            df['referring_domain'] = df['referring_page_url'].apply(extract_domain)
             df["full_context"] = df[["left context", "anchor", "right context"]].astype(str).agg(' '.join, axis=1)
             df["anchor_lower"] = df["anchor"].astype(str).str.strip().str.lower()
 
             spam_rules = {
                 'adult': re.compile(r'\b(?:' + '|'.join(["porn", "sex", "camgirl", "escort", "xxx", "anal", "nude"]) + r')\b', re.I),
                 'pharma': re.compile(r'\b(?:' + '|'.join(["penis", "erectile", "enlargement", "enhancement"]) + r')\b', re.I),
-                'seo': re.compile('|'.join(["buy backlinks", "seo tool", "cheap backlinks", "rank booster", "pbn"]), re.I)
+                'seo': re.compile(r'\b(?:' + '|'.join(["buy backlinks", "seo tool", "cheap backlinks", "rank booster", "pbn"]) + r')\b', re.I)
             }
 
             matched = df[
