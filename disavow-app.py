@@ -3,6 +3,7 @@ import pandas as pd
 import re
 from urllib.parse import urlparse
 import io
+import tldextract
 
 # === PAGE SETUP ===
 st.set_page_config(page_title="Disavow Tool", layout="wide")
@@ -24,6 +25,20 @@ def fuzzy_match(col_map, keyword):
         if keyword in key.replace(" ", "").lower():
             return col_map[key]
     return None
+
+def get_root_domain(domain):
+    """Extract eTLD+1 (e.g. 'sub.example.co.uk' -> 'example.co.uk')."""
+    ext = tldextract.extract(domain)
+    if ext.domain and ext.suffix:
+        return f"{ext.domain}.{ext.suffix}"
+    return domain
+
+def is_already_disavowed(domain, existing_domains, existing_root_domains):
+    """Return True if domain or its root domain is already disavowed."""
+    if domain in existing_domains:
+        return True
+    root = get_root_domain(domain)
+    return root in existing_domains or root in existing_root_domains
 
 def normalize_backlink_df(df):
     col_map = {col.lower().strip(): col for col in df.columns}
@@ -51,8 +66,11 @@ if st.button("🚀 Generate Disavow List"):
                     str(line).strip().replace("domain:", "").lower().replace("www.", "")
                     for line in disavow_lines if str(line).strip().startswith("domain:")
                 }
+                # Root domains already disavowed — any subdomain of these is covered
+                existing_root_domains = {get_root_domain(d) for d in existing_domains}
             else:
                 existing_domains = set()
+                existing_root_domains = set()
 
             all_dfs = []
             for file in backlink_files:
@@ -135,10 +153,18 @@ if st.button("🚀 Generate Disavow List"):
                 df['anchor_lower'].apply(lambda x: any(p in x for p in suspicious_anchors))
             ]
 
-            matched = matched[~matched['referring_domain'].isin(existing_domains)]
+            # Exclude domains already covered (exact match OR root domain already disavowed)
+            mask_covered = matched['referring_domain'].apply(
+                lambda d: is_already_disavowed(d, existing_domains, existing_root_domains)
+            )
+            skipped_subdomain_count = int(mask_covered.sum()) - int(matched['referring_domain'].isin(existing_domains).sum())
+            matched = matched[~mask_covered]
             final_domains = sorted(set(matched['referring_domain']))
 
-            st.success(f"🌟 {len(final_domains)} new spammy domains detected.")
+            msg = f"🌟 {len(final_domains)} new spammy domains detected."
+            if skipped_subdomain_count > 0:
+                msg += f" ({skipped_subdomain_count} subdomain entries skipped — root domain already disavowed)"
+            st.success(msg)
 
             disavow_txt = '\n'.join(["domain:" + d for d in final_domains])
             st.session_state["disavow_txt"] = disavow_txt
@@ -175,6 +201,7 @@ with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
                     line.strip().lower().replace("domain:", "").replace("www.", "")
                     for line in disavow_lines if line.strip().lower().startswith("domain:")
                 }
+                existing_root_domains = {get_root_domain(d) for d in existing_domains}
 
                 # Extract referring_page_url domains from reviewed Excel
                 xls = pd.ExcelFile(reviewed_excel, engine="openpyxl")
@@ -190,9 +217,15 @@ with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
                 )
                 reviewed_domains = set(d for d in reviewed_domains if d)
 
-                # Find new domains only
-                new_domains = sorted(reviewed_domains - existing_domains)
-                already_present = reviewed_domains & existing_domains
+                # Find new domains only — skip if exact match OR root domain already disavowed
+                new_domains = sorted(
+                    d for d in reviewed_domains
+                    if not is_already_disavowed(d, existing_domains, existing_root_domains)
+                )
+                already_present = {
+                    d for d in reviewed_domains
+                    if is_already_disavowed(d, existing_domains, existing_root_domains)
+                }
 
                 # Final output
                 final_lines = disavow_lines + [f"domain:{d}" for d in new_domains]
