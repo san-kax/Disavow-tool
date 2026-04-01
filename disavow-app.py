@@ -171,7 +171,7 @@ if st.button("🚀 Generate Disavow List"):
             df = pd.concat(all_dfs, ignore_index=True)
             df['referring_domain'] = df['referring_page_url'].apply(lambda x: urlparse(str(x)).netloc.lower().replace("www.", ""))
             df["full_context"] = df[["left context", "anchor", "right context"]].fillna("").astype(str).agg(' '.join, axis=1)
-            df["anchor_lower"] = df["anchor"].astype(str).str.strip().str.lower()
+            df["anchor_lower"] = df["anchor"].fillna("").astype(str).str.strip().str.lower()
 
             spam_rules = {
                 'adult': re.compile(r'\b(?:' + '|'.join(["porn", "sex", "camgirl", "escort", "xxx", "anal", "nude"]) + r')\b', re.I),
@@ -180,10 +180,10 @@ if st.button("🚀 Generate Disavow List"):
             }
 
             matched = df[
-                df['full_context'].str.contains(spam_rules['adult']) |
-                df['anchor_lower'].str.contains(spam_rules['pharma']) |
-                df['anchor_lower'].str.contains(spam_rules['seo']) |
-                df['anchor_lower'].apply(lambda x: any(p in x for p in suspicious_anchors))
+                df['full_context'].str.contains(spam_rules['adult'], na=False) |
+                df['anchor_lower'].str.contains(spam_rules['pharma'], na=False) |
+                df['anchor_lower'].str.contains(spam_rules['seo'], na=False) |
+                df['anchor_lower'].apply(lambda x: any(p in str(x) for p in suspicious_anchors))
             ]
 
             # Exclude domains already covered (exact match OR root domain already disavowed)
