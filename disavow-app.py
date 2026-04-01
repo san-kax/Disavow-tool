@@ -11,8 +11,41 @@ st.title("🔗 Disavow Tool")
 
 # === SIDEBAR ===
 st.sidebar.header("Upload Required Files")
-backlink_files = st.sidebar.file_uploader("Upload backlink CSV files", type="csv", accept_multiple_files=True)
-disavow_file = st.sidebar.file_uploader("Upload existing disavow.txt (optional)", type="txt")
+
+# upload_key increments on reset, forcing file uploader widgets to re-initialize empty
+if "upload_key" not in st.session_state:
+    st.session_state["upload_key"] = 0
+
+_backlink_uploads = st.sidebar.file_uploader(
+    "Upload backlink CSV files", type="csv", accept_multiple_files=True,
+    key=f"backlink_uploader_{st.session_state['upload_key']}"
+)
+_disavow_upload = st.sidebar.file_uploader(
+    "Upload existing disavow.txt (optional)", type="txt",
+    key=f"disavow_uploader_{st.session_state['upload_key']}"
+)
+
+# Persist uploaded file bytes in session state so they survive reruns
+if _backlink_uploads:
+    st.session_state["backlink_file_data"] = [
+        {"name": f.name, "data": f.read()} for f in _backlink_uploads
+    ]
+if _disavow_upload:
+    st.session_state["disavow_file_data"] = {"name": _disavow_upload.name, "data": _disavow_upload.read()}
+
+class NamedBytesIO(io.BytesIO):
+    """BytesIO with a name attribute, compatible with pd.read_csv."""
+    def __init__(self, data, name):
+        super().__init__(data)
+        self.name = name
+
+# Reconstruct seekable file-like objects from session state
+backlink_files = [
+    NamedBytesIO(f["data"], f["name"])
+    for f in st.session_state.get("backlink_file_data", [])
+]
+_disavow_data = st.session_state.get("disavow_file_data")
+disavow_file = NamedBytesIO(_disavow_data["data"], _disavow_data["name"]) if _disavow_data else None
 
 SHEET_LINK = "https://docs.google.com/spreadsheets/d/1S_fkjSaCQLv5xLMcdqC-Xh2gKn1WazeNs1J14aukx84/edit#gid=147585760"
 CSV_EXPORT_URL = "https://docs.google.com/spreadsheets/d/1S_fkjSaCQLv5xLMcdqC-Xh2gKn1WazeNs1J14aukx84/export?format=csv&gid=147585760"
@@ -137,7 +170,7 @@ if st.button("🚀 Generate Disavow List"):
 
             df = pd.concat(all_dfs, ignore_index=True)
             df['referring_domain'] = df['referring_page_url'].apply(lambda x: urlparse(str(x)).netloc.lower().replace("www.", ""))
-            df["full_context"] = df[["left context", "anchor", "right context"]].astype(str).agg(' '.join, axis=1)
+            df["full_context"] = df[["left context", "anchor", "right context"]].fillna("").astype(str).agg(' '.join, axis=1)
             df["anchor_lower"] = df["anchor"].astype(str).str.strip().str.lower()
 
             spam_rules = {
@@ -243,14 +276,9 @@ with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
             except Exception as e:
                 st.error(f"❌ Error merging files: {e}")
 
-# === Safe Reset Trigger ===
-if "trigger_reset" not in st.session_state:
-    st.session_state["trigger_reset"] = False
-
+# === Reset App ===
 if st.sidebar.button("🔄 Reset App"):
-    st.session_state["trigger_reset"] = True
-
-# Perform reset on next script run
-if st.session_state["trigger_reset"]:
+    current_key = st.session_state.get("upload_key", 0)
     st.session_state.clear()
-    st.stop()  # Halts script safely instead of rerunning
+    st.session_state["upload_key"] = current_key + 1  # Forces file uploaders to re-render empty
+    st.rerun()
