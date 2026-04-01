@@ -91,7 +91,7 @@ if st.button("🚀 Generate Disavow List"):
     else:
         try:
             suspicious_df = pd.read_csv(CSV_EXPORT_URL)
-            suspicious_anchors = set(suspicious_df['anchor_text'].dropna().str.strip().str.lower())
+            suspicious_anchors = set(suspicious_df['anchor_text'].dropna().astype(str).str.strip().str.lower())
 
             if disavow_file:
                 disavow_lines = disavow_file.read().decode("utf-8", errors="ignore").splitlines()
