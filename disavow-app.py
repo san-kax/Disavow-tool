@@ -99,8 +99,12 @@ if st.button("🚀 Generate Disavow List"):
                     str(line).strip().replace("domain:", "").lower().replace("www.", "")
                     for line in disavow_lines if str(line).strip().startswith("domain:")
                 }
-                # Root domains already disavowed — any subdomain of these is covered
-                existing_root_domains = {get_root_domain(d) for d in existing_domains}
+                # Root domains already disavowed — only entries that ARE root domains cover subdomains.
+                # A subdomain entry like "sub.example.com" does NOT cover "other.example.com".
+                existing_root_domains = {
+                    d for d in existing_domains
+                    if get_root_domain(d) == d  # only true root-domain entries cover all subdomains
+                }
             else:
                 existing_domains = set()
                 existing_root_domains = set()
@@ -234,7 +238,10 @@ with st.expander("📎 Merge Reviewed Excel with Existing disavow.txt"):
                     line.strip().lower().replace("domain:", "").replace("www.", "")
                     for line in disavow_lines if line.strip().lower().startswith("domain:")
                 }
-                existing_root_domains = {get_root_domain(d) for d in existing_domains}
+                existing_root_domains = {
+                    d for d in existing_domains
+                    if get_root_domain(d) == d  # only true root-domain entries cover all subdomains
+                }
 
                 # Extract referring_page_url domains from reviewed Excel
                 xls = pd.ExcelFile(reviewed_excel, engine="openpyxl")
